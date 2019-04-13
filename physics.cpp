@@ -16,6 +16,7 @@
 
 #include <bits/stdc++.h>
 #include <conio.h>
+#include <chrono> // for random
 #include "exprtk.hpp"
 
 #define __pc_getch() cerr<<endl<<"Press any key to continue... ";_getch()
@@ -25,8 +26,10 @@ using namespace std;
 
 /* === CONSTANTS === */
 
+#define DEFAULT_LOG_TO_ERR 1
+
 const string __pc_PCName    = "Physics Calculator";
-const string __pc_PCVersion = "1.0a";
+const string __pc_PCVersion = "1.0b_stable";
 const string __pc_PCAuthor  = "quyenjd";
 
 const string __pc_Functions_fName = "physics_Functions.pc";
@@ -68,6 +71,11 @@ string StrFormat (const char* __pc_Format...)
 
 /* === DECLARATIONS === */
 
+bool PrintLogToErrFlag;
+
+mt19937 Seed (chrono::system_clock::now().time_since_epoch() / chrono::milliseconds(1));
+uniform_int_distribution<int> Generator (2, INT_MAX - 1);
+
 struct Stats
 {
     int __pc_FunctionFound;
@@ -99,16 +107,16 @@ struct Stats
             cerr << endl << StrFormat("===[LOGGER].ShowError()=== reported: %s", __pc_LogLine) << endl;
     }
 
-    void Export (bool toerr = 1)
+    void Export ()
     {
-        cerr << "Writing logs... (" << __pc_Logs.size() << " line" << (__pc_Logs.size() > 1 ? "s" : "\0") << ")" << endl;
-        if (toerr)
+        cerr << StrFormat("Writing logs... (%d line%s)", __pc_Logs.size(), string(__pc_Logs.size() > 1 ? "s" : "\0")) << endl;
+        if (DEFAULT_LOG_TO_ERR)
             cerr << "===" << endl;
 
         ofstream Log_FS (__pc_Log_fName);
         for (string LogLine: __pc_Logs)
         {
-            if (toerr)
+            if (DEFAULT_LOG_TO_ERR)
                 cerr << LogLine << endl;
             Log_FS << LogLine << endl;
         }
@@ -139,12 +147,49 @@ struct Stats
     }
 };
 
-set<string> __pc_Functions;
+set<string> __pc_Functions, __pc_Forbid;
+
+class Hash
+{
+private:
+    long long HashCode;
+
+public:
+    Hash (long long __HashCode = Generator(Seed)): HashCode(__HashCode) {}
+
+    Hash& RaiseToPower ()
+    {
+        long long Answer = 1;
+        for (long long Base = HashCode; Base; HashCode = (HashCode * HashCode) % INT_MAX, Base >>= 1)
+            if (Base & 1)
+                Answer = (Answer * HashCode) % INT_MAX;
+        HashCode = Answer;
+
+        return *this;
+    }
+
+    Hash& Compile (Hash Partner)
+    {
+        HashCode = (HashCode + Partner.RaiseToPower().HashCode) % INT_MAX;
+        return *this;
+    }
+
+    bool Equals (Hash Partner) const
+    {
+        return HashCode == Partner.HashCode;
+    }
+
+    long long GetHashCode () const
+    {
+        return HashCode;
+    }
+};
 
 struct Variable
 {
     string VarName;
     string Description;
+    Hash Code;
 
     Variable (string __VarName = "", string __Description = ""):
         VarName(__VarName), Description(__Description) {}
@@ -181,7 +226,9 @@ struct Formula
     string Root        = "unknown";
     string Progression = "empty";
 
-    bool FetchToken (Stats& __pc_Ends)
+    Hash Code = Hash(0);
+
+    bool FetchTokenAndHash (Stats& __pc_Ends)
     {
         Tokens.clear();
 
@@ -198,7 +245,7 @@ struct Formula
 
         if (__EqualSigns > 1 || __EqualSigns == 0)
         {
-            __pc_Ends.Log(StrFormat("[Formula.FetchToken()]   Compilation error[INVALID_EQUALSIGNS]! Invalid Expression:%s.", Expression));
+            __pc_Ends.Log(StrFormat("[Formula.FetchTokenAndHash()]   Compilation error[INVALID_EQUALSIGNS]! Invalid Expression:%s.", Expression));
             return false;
         }
 
@@ -207,7 +254,7 @@ struct Formula
             {
                 if (index_i && isdigit(Expression[index_i - 1]))
                 {
-                    __pc_Ends.Log(StrFormat("[Formula.FetchToken()]   Compilation error[INVALID_TOKEN]! Invalid Expression:%s.", Expression));
+                    __pc_Ends.Log(StrFormat("[Formula.FetchTokenAndHash()]   Compilation error[INVALID_TOKEN]! Invalid Expression:%s.", Expression));
                     return false;
                 }
 
@@ -220,6 +267,7 @@ struct Formula
                 if (__pc_Variables.find(__Tmp) != __pc_Variables.end())
                 {
                     Tokens.insert(__Tmp);
+                    Code.Compile(__pc_Variables[__Tmp].Code);
                     continue;
                 }
 
@@ -230,7 +278,7 @@ struct Formula
                 if (__abc != "pi" && __abc != "e" &&
                     __pc_Constants.find(__Tmp) == __pc_Constants.end() && __pc_Functions.find(__Tmp) == __pc_Functions.end())
                 {
-                    __pc_Ends.Log(StrFormat("[Formula.FetchToken()]   Compilation error[UNKNOWN_TOKEN]! Invalid Expression:%s (Token:%s).", Expression, __Tmp));
+                    __pc_Ends.Log(StrFormat("[Formula.FetchTokenAndHash()]   Compilation error[UNKNOWN_TOKEN]! Invalid Expression:%s (Token:%s).", Expression, __Tmp));
                     return false;
                 }
             }
@@ -252,7 +300,7 @@ struct Formula
 
         if (!parser.compile(__Working, expression))
         {
-            __pc_Ends.Log(StrFormat("[Formula.FetchToken()/exprtk::parser.compile()]   Compilation error! Invalid Expression:%s.", Expression));
+            __pc_Ends.Log(StrFormat("[Formula.FetchTokenAndHash()/exprtk::parser.compile()]   Compilation error! Invalid Expression:%s.", Expression));
             return false;
         }
 
@@ -283,7 +331,7 @@ void ScanFormulas      (unordered_map<string, vector<Formula> >& __pc_MapFormula
 
 /* Queries */
 void FindFormula       (const set<string>& __pc_Arguments, vector<Formula>& __pc_VectorFormula, const string& __pc_Root,  Stats& __pc_Ends);
-bool CheckNameVaild    (const string& __pc_Name, const string& __pc_Type, bool __pc_Log,                                  Stats& __pc_Ends);
+bool CheckNameValidity (const string& __pc_Name, const string& __pc_Type, bool __pc_Log,                                  Stats& __pc_Ends);
 
 /* Developers */
 bool AddFunction       (const string& __pc_NewFunction,                                                                   Stats& __pc_Ends);
@@ -422,7 +470,7 @@ void ScanFormulas (unordered_map<string, vector<Formula> >& __pc_MapFormulas, St
         Str_SS >> __Formula;
         Formula __Working(__Formula);
 
-        if (!__Working.FetchToken(__pc_Ends))
+        if (!__Working.FetchTokenAndHash(__pc_Ends))
         {
             ++__pc_Ends.__pc_FormulaFoundFailed;
             continue;
@@ -442,25 +490,22 @@ void ScanFormulas (unordered_map<string, vector<Formula> >& __pc_MapFormulas, St
 
 void FindFormula (const set<string>& __pc_Arguments, vector<Formula>& __pc_VectorFormula, const string& __pc_Root, Stats& __pc_Ends)
 {
+    Hash __Args(0);
+    for (string __Tmp: __pc_Arguments)
+        __Args.Compile(__pc_Variables[__Tmp].Code);
+    __Args.Compile(__pc_Variables[__pc_Root].Code);
+
     for (MapFormula_Iterator iter = __pc_Formulas.begin(); iter != __pc_Formulas.end(); ++iter)
     {
         if (iter->first != __pc_Root)
             continue;
 
-        vector<Formula> __Working = iter->second;
-
-        for (Formula __Tmp: __Working)
+        for (Formula __Tmp: iter->second)
         {
             if (__Tmp.Root != __pc_Root)
                 continue;
 
-            unsigned int __Count = 0;
-
-            for (string __Arg: __pc_Arguments)
-                if (__Tmp.Tokens.find(__Arg) != __Tmp.Tokens.end())
-                    ++__Count;
-
-            if (__Count == __pc_Arguments.size())
+            if (__Tmp.Code.Equals(__Args))
             {
                 __pc_VectorFormula.push_back(__Tmp);
                 ++__pc_Ends.__pc_FormulaUsed;
@@ -469,7 +514,7 @@ void FindFormula (const set<string>& __pc_Arguments, vector<Formula>& __pc_Vecto
     }
 }
 
-bool CheckNameVaild (const string& __pc_Name, const string& __pc_Type, bool __pc_Log, Stats& __pc_Ends)
+bool CheckNameValidity (const string& __pc_Name, const string& __pc_Type, bool __pc_Log, Stats& __pc_Ends)
 {
     if (__pc_Name.empty())
         return false;
@@ -484,21 +529,21 @@ bool CheckNameVaild (const string& __pc_Name, const string& __pc_Type, bool __pc
     if (__pc_Functions.find(__pc_Name) != __pc_Functions.end())
     {
         if (__pc_Log)
-            __pc_Ends.Log(StrFormat("[CheckNameVaild]   Conflict detected on %s:%s [NAME_WAS_USED_BY_SOME_FUNCTION].", __pc_Type, __pc_Name));
+            __pc_Ends.Log(StrFormat("[CheckNameValidity]   Conflict detected on %s:%s [NAME_WAS_USED_BY_SOME_FUNCTION].", __pc_Type, __pc_Name));
         return false;
     }
 
     if (__pc_Constants.find(__pc_Name) != __pc_Constants.end())
     {
         if (__pc_Log)
-            __pc_Ends.Log(StrFormat("[CheckNameVaild]   Conflict detected on %s:%s [NAME_WAS_USED_BY_SOME_CONSTANT].", __pc_Type, __pc_Name));
+            __pc_Ends.Log(StrFormat("[CheckNameValidity]   Conflict detected on %s:%s [NAME_WAS_USED_BY_SOME_CONSTANT].", __pc_Type, __pc_Name));
         return false;
     }
 
     if (__pc_Variables.find(__pc_Name) != __pc_Variables.end())
     {
         if (__pc_Log)
-            __pc_Ends.Log(StrFormat("[CheckNameVaild]   Conflict detected on %s:%s [NAME_WAS_USED_BY_SOME_VARIABLE].", __pc_Type, __pc_Name));
+            __pc_Ends.Log(StrFormat("[CheckNameValidity]   Conflict detected on %s:%s [NAME_WAS_USED_BY_SOME_VARIABLE].", __pc_Type, __pc_Name));
         return false;
     }
 
@@ -507,7 +552,7 @@ bool CheckNameVaild (const string& __pc_Name, const string& __pc_Type, bool __pc
 
 bool AddFunction (const string& __pc_NewFunction, Stats& __pc_Ends)
 {
-    if (!CheckNameVaild(__pc_NewFunction, "Function", 1, __pc_Ends))
+    if (!CheckNameValidity(__pc_NewFunction, "Function", 1, __pc_Ends))
         return false;
 
     __pc_Functions.insert(__pc_NewFunction);
@@ -517,7 +562,7 @@ bool AddFunction (const string& __pc_NewFunction, Stats& __pc_Ends)
 
 bool AddVariable (const string& __pc_NewVariable, const string& __pc_Description, Stats& __pc_Ends)
 {
-    if (!CheckNameVaild(__pc_NewVariable, "Variable", 1, __pc_Ends))
+    if (!CheckNameValidity(__pc_NewVariable, "Variable", 1, __pc_Ends))
         return false;
 
     string __abc;
@@ -536,7 +581,7 @@ bool AddVariable (const string& __pc_NewVariable, const string& __pc_Description
 
 bool AddConstant (const string& __pc_NewConstant, const double& __pc_Value, const string& __pc_Description, Stats& __pc_Ends)
 {
-    if (!CheckNameVaild(__pc_NewConstant, "Constant", 1, __pc_Ends))
+    if (!CheckNameValidity(__pc_NewConstant, "Constant", 1, __pc_Ends))
         return false;
 
     string __abc;
@@ -556,7 +601,7 @@ bool AddConstant (const string& __pc_NewConstant, const double& __pc_Value, cons
 bool AddFormula (const string& __pc_NewFormula, const string& __pc_Description, Stats& __pc_Ends)
 {
     Formula __Working(__pc_NewFormula, __pc_Description);
-    if (!__Working.FetchToken(__pc_Ends))
+    if (!__Working.FetchTokenAndHash(__pc_Ends))
     {
         __pc_Ends.Log(StrFormat("[AddFormula]   Invalid Formula:%s (Root:%s). Rejected.", __pc_NewFormula, __Working.Root));
         return false;
@@ -567,10 +612,10 @@ bool AddFormula (const string& __pc_NewFormula, const string& __pc_Description, 
     return true;
 }
 
-void BrainStorm (const string& __pc_Expression, set<string> __pc_Forbid, int depth, Stats& __pc_Ends)
+void BrainStorm (const string& __pc_Expression, int depth, Stats& __pc_Ends)
 {
-    Formula __Working(__pc_Expression, "FetchToken() is used in BrainStorm.");
-    __Working.FetchToken(__pc_Ends);
+    Formula __Working(__pc_Expression, "FetchTokenAndHash() is used in BrainStorm.");
+    __Working.FetchTokenAndHash(__pc_Ends);
     for (string __Token: __Working.Tokens)
     {
         if (__Token == __Working.Root || __pc_Forbid.find(__Token) != __pc_Forbid.end())
@@ -578,11 +623,12 @@ void BrainStorm (const string& __pc_Expression, set<string> __pc_Forbid, int dep
 
         for (Formula __Tmp: __pc_Formulas[__Token])
         {
-            bool __Chosen = 0;
+            bool __Chosen = 1;
             for (string __Token2: __Tmp.Tokens)
-                if (__Working.Tokens.find(__Token2) == __Working.Tokens.end() && __pc_Forbid.find(__Token2) == __pc_Forbid.end())
+                if (__Token2 != __Tmp.Root &&
+                    (__Working.Tokens.find(__Token2) != __Working.Tokens.end() || __pc_Forbid.find(__Token2) != __pc_Forbid.end()))
                 {
-                    __Chosen = 1;
+                    __Chosen = 0;
                     break;
                 }
 
@@ -594,9 +640,10 @@ void BrainStorm (const string& __pc_Expression, set<string> __pc_Forbid, int dep
 
                 __pc_Forbid.insert(__Tmp.Root);
 
-                cerr << StrFormat("[BrainStorm]   Expression:%s is generated! (depth=%d, chosen:%s)", __Entry, depth, __Tmp.Expression) << endl;
+                if (PrintLogToErrFlag)
+                    cerr << StrFormat("[BrainStorm]   Expression:%s is generated! (depth=%d, chosen:%s)", __Entry, depth, __Tmp.Expression) << endl;
                 AddFormula(__Entry, StrFormat("Generated by BrainStorm from Formula:%s (depth=%d)", __pc_Expression, depth), __pc_Ends);
-                BrainStorm(__Entry, __pc_Forbid, depth + 1, __pc_Ends);
+                BrainStorm(__Entry, depth + 1, __pc_Ends);
             }
         }
     }
@@ -607,7 +654,7 @@ void ParseExpression (const string& __pc_Expression, unordered_map<string, doubl
     __pc_Answer = 0;
     Formula __Expression(__pc_Expression);
 
-    if (!__Expression.FetchToken(__pc_Ends))
+    if (!__Expression.FetchTokenAndHash(__pc_Ends))
     {
         __pc_Ends.Log(StrFormat("[ParseExpression]   Error while fetching token on Formula:%s.", __pc_Expression));
         return;
@@ -644,50 +691,27 @@ void ParseExpression (const string& __pc_Expression, unordered_map<string, doubl
 
 void RemoveDuplicates (unordered_map<string, vector<Formula> >& __pc_MapFormula, int& __pc_DuplicateRemoved)
 {
-    vector<set<string> > __Savers;
-    unordered_map<string, vector<Formula> > __Result;
+    map<long long int, bool> HashCheck;
     __pc_DuplicateRemoved = 0;
 
     for (MapFormula_Iterator iter = __pc_MapFormula.begin(); iter != __pc_MapFormula.end(); ++iter)
     {
-        __Savers.clear();
-        __Result[iter->first];
+        size_t index_j = 0;
+        HashCheck.clear();
 
-        for (Formula __Working: iter->second)
+        for (size_t index_i = 0; index_i < iter->second.size(); ++index_i)
         {
-            bool __ToBeAdded = 1;
-
-            for (set<string> __Tmp: __Savers)
+            Formula __Working = iter->second[index_i];
+            if (HashCheck.find(__Working.Code.GetHashCode()) == HashCheck.end())
             {
-                if (__Working.Tokens.size() != __Tmp.size())
-                    continue;
-
-                bool __Same = 1;
-                for (string __Token: __Tmp)
-                    if (__Working.Tokens.find(__Token) == __Working.Tokens.end())
-                    {
-                        __Same = 0;
-                        break;
-                    }
-
-                if (__Same)
-                {
-                    __ToBeAdded = 0;
-                    break;
-                }
-            }
-
-            if (__ToBeAdded)
-            {
-                __Result[iter->first].push_back(__Working);
-                __Savers.push_back(__Working.Tokens);
+                iter->second[index_j++] = __Working;
+                HashCheck[__Working.Code.GetHashCode()] = true;
             }
             else
                 ++__pc_DuplicateRemoved;
         }
+        iter->second.resize(index_j);
     }
-
-    __pc_MapFormula = __Result;
 }
 
 void PhysicsCalculator (Stats& __pc_Ends)
@@ -751,9 +775,16 @@ void PhysicsCalculator (Stats& __pc_Ends)
                 // FORMULA COMMAND
 
                 string __NewFormula, __Description, __Tmp;
+                PrintLogToErrFlag = 0;
+
                 Str_SS >> __NewFormula;
                 while (Str_SS >> __Tmp)
-                    __Description += __Tmp + ' ';
+                {
+                    if (__Tmp == "--brainstormlog")
+                        PrintLogToErrFlag = 1;
+                    else
+                        __Description += __Tmp + ' ';
+                }
 
                 if (__Description.length())
                     __Description.pop_back();
@@ -782,15 +813,17 @@ void PhysicsCalculator (Stats& __pc_Ends)
                         for (size_t index_i = 0; index_i < __Formulas.size(); ++index_i)
                         {
                             int __SaverFormulaAdded = __pc_Ends.__pc_FormulaAdded;
-                            BrainStorm(__Formulas[index_i].Expression, set<string>(), 0, __pc_Ends);
-                            cerr << StrFormat("[Brainstorm-Caller]   Learning done from Formula:%s (found %d formulas).",
-                                              __Formulas[index_i].Expression, __pc_Ends.__pc_FormulaAdded - __SaverFormulaAdded) << endl;
+                            __pc_Forbid.clear();
+                            BrainStorm(__Formulas[index_i].Expression, 0, __pc_Ends);
+                            if (PrintLogToErrFlag)
+                                cerr << StrFormat("[Brainstorm-Caller]   Learning done from Formula:%s (found %d formulas).",
+                                                  __Formulas[index_i].Expression, __pc_Ends.__pc_FormulaAdded - __SaverFormulaAdded) << endl;
                         }
 
                         cerr << "Removing duplicates..." << endl;
                         int __Counter = 0;
                         RemoveDuplicates(__pc_Formulas, __Counter);
-                        cerr << "[RemoveDuplicates]   " << __Counter << " duplicate" << (__Counter > 1 ? "s" : "") << " removed." << endl;
+                        cerr << StrFormat("[RemoveDuplicates]   %d duplicate%sremoved.", __Counter, string(__Counter > 1 ? "s " : " ")) << endl;
 
                         cerr << endl;
                         cerr << "Complete learning." << endl;
@@ -853,8 +886,24 @@ void PhysicsCalculator (Stats& __pc_Ends)
                             __Var += __Tmp[index_i];
                     swap(__Var, __Value);
 
+                    // Evaluate __Value
+                    exprtk::symbol_table<double> symbol_table;
+                    exprtk::expression<double>   expression;
+                    exprtk::parser<double>       parser;
+
+                    symbol_table.add_constants();
+                    expression.register_symbol_table(symbol_table);
+
+                    if (!parser.compile(__Value, expression))
+                    {
+                        __pc_Ends.Log(StrFormat("[PhysicsCalculator()/exprtk::parser.compile()]   Compilation error! Invalid Expression:%s.", __Var + '=' + __Value));
+                        cerr << endl;
+                        __pc_getch();
+                        continue;
+                    }
+
                     __Arguments.insert(__Var);
-                    __UserInput[__Var] = stod(__Value);
+                    __UserInput[__Var] = expression.value();
 
                     __Args += StrFormat("%s=%s,", __Var, to_string(__UserInput[__Var]));
                 }
@@ -873,9 +922,10 @@ void PhysicsCalculator (Stats& __pc_Ends)
                     FindFormula(__Arguments, __SuitableExpressions, __Root, __pc_Ends);
 
                     if (__SuitableExpressions.size())
-                        cerr << StrFormat("%d formulas found.", __SuitableExpressions.size()) << endl << endl;
+                        cerr << StrFormat("%d formula%sfound.", __SuitableExpressions.size(),
+                                          string(__SuitableExpressions.size() > 1 ? "s " : " ")) << endl << endl;
                     else
-                        cerr << "No formulas found." << endl;
+                        cerr << "No formula found." << endl;
 
                     for (Formula __Working: __SuitableExpressions)
                     {
@@ -1082,10 +1132,10 @@ void Greetings ()
     cerr << "# quit" << endl;
     cerr << endl;
     cerr << "[>] Note:" << endl;
-    cerr << "Should it not been for the syntax, please don't use spaces randomly." << endl;
+    cerr << "Except for syntax, please don't use spaces randomly." << endl;
     cerr << "Every name of constants, functions... must start with a letter and contain only numbers and letters." << endl;
-    cerr << "There will be less error reported so you must be cautious about your typing." << endl;
-    cerr << "Be careful when you add new entry. You will have to edit the log file if you make a mistake." << endl;
+    cerr << "Error reporting is in primitive stage so you should be cautious about your typing." << endl;
+    cerr << "Be careful when adding new entry. You will have to edit the *.pc files manually if mistakes are made." << endl;
     cerr << "YOU are responsible for the program's misbehaviors!" << endl;
     cerr << "---" << endl;
 }
