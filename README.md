@@ -6,8 +6,8 @@ The project was started because the owner was too lazy to find formulas from boo
 
 ## Installation
 
-1. Download the source.
-2. Compile the `physics.cpp` file (with `exprtk.hpp`).
+1. Download all the source.
+2. Compile the `physics.cpp` file (with `exprtk.hpp`). C++11 or above is recommended.
 
 ## How to use
 
@@ -15,18 +15,18 @@ You just need to read and follow the instructions from the program carefully.
 
 Because no data has been done, you will have to start over by using the program to create your structure. Don't worry! We've got your back.
 
-## Changelog
-
-Initial release.
+## Functions
 
 ```
-// - Support constants, functions, variables and formulas structure.
+// - Support hashes, constants, functions, variables and formulas structure.
 // - You can add new constant, function, variable and formula.
 // - Auto find suitable formulas and calculate them with "solve" command.
-// - Error checking and reporting is available.
+// - Error checking and reporting.
 // - "brainstorm" helps generating new formula by joining some of available formulas. triggered by "formula" command.
-// - Optimization is not good.
+// - Optimization is ~~not good~~ better now.
 ```
+
+*Please note that `brainstorm` only replaces variables by formulas. It can't help solve equations.*
 
 ## Bugs
 

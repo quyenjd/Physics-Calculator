@@ -29,7 +29,7 @@ using namespace std;
 #define DEFAULT_LOG_TO_ERR 1
 
 const string __pc_PCName    = "Physics Calculator";
-const string __pc_PCVersion = "1.0b_stable";
+const string __pc_PCVersion = "1.0b2_stable";
 const string __pc_PCAuthor  = "quyenjd";
 
 const string __pc_Functions_fName = "physics_Functions.pc";
@@ -863,6 +863,7 @@ void PhysicsCalculator (Stats& __pc_Ends)
                 // SOLVE COMMAND
 
                 string __Args, __Root, __Tmp;
+                bool __Valid = true;
 
                 set<string> __Arguments;
                 unordered_map<string, double> __UserInput;
@@ -899,7 +900,8 @@ void PhysicsCalculator (Stats& __pc_Ends)
                         __pc_Ends.Log(StrFormat("[PhysicsCalculator()/exprtk::parser.compile()]   Compilation error! Invalid Expression:%s.", __Var + '=' + __Value));
                         cerr << endl;
                         __pc_getch();
-                        continue;
+                        __Valid = false;
+                        break;
                     }
 
                     __Arguments.insert(__Var);
@@ -907,6 +909,9 @@ void PhysicsCalculator (Stats& __pc_Ends)
 
                     __Args += StrFormat("%s=%s,", __Var, to_string(__UserInput[__Var]));
                 }
+
+                if (!__Valid)
+                    continue;
 
                 if (__Args.length())
                     __Args.pop_back();
@@ -1115,11 +1120,11 @@ void Greetings ()
     cerr << StrFormat("Welcome to %s (%s) by @%s.", __pc_PCName, __pc_PCVersion, __pc_PCAuthor) << endl;
     cerr << "---" << endl;
     cerr << "[>] How to use?" << endl;
-    cerr << "- const <name of new constant to be added> <value> <description>" << endl;
-    cerr << "- formula <formula to be added> <description>" << endl;
-    cerr << "- func <name of function to be added>" << endl;
-    cerr << "- solve <argument 1> <argument 2> ... <root (eg. if you want to solve for T, type ?T)>" << endl;
-    cerr << "- var <name of variable to be added> <description>" << endl;
+    cerr << "- const <name of new constant to be added> <value> <description> (eg. const Pi 3.14 pi number)" << endl;
+    cerr << "- formula <formula to be added> <description> (eg. formula C=2*Pi*r calculate circle's circumference)" << endl;
+    cerr << "- func <name of function to be added> (eg. func cos)" << endl;
+    cerr << "- solve <argument 1> <argument 2> ... <root (eg. ?X to solve for X)> (eg. solve r=3 ?C)" << endl;
+    cerr << "- var <name of variable to be added> <description> (eg. var r radius)" << endl;
     cerr << endl;
     cerr << "= consts   [ list all constants ]" << endl;
     cerr << "= formulas [ list all formulas  ]" << endl;
