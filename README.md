@@ -13,8 +13,6 @@ The project was started because the owner was too lazy to find formulas from boo
 
 You just need to read and follow the instructions from the program carefully.
 
-Because no data has been done, you will have to start over by using the program to create your structure. Don't worry! We've got your back.
-
 ## Functions
 
 ```
@@ -23,7 +21,7 @@ Because no data has been done, you will have to start over by using the program 
 // - Auto find suitable formulas and calculate them with "solve" command.
 // - Error checking and reporting.
 // - "brainstorm" helps generating new formula by joining some of available formulas. triggered by "formula" command.
-// - Optimization is ~~not good~~ better now.
+// - Optimization is better now.
 ```
 
 *Please note that `brainstorm` only replaces variables by formulas. It can't help solve equations.*
